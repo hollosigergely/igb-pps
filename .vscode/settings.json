@@ -1,0 +1,3 @@
+{
+    "C_Cpp.default.defines": [ "HAVE_PTP_1588_CLOCK"]
+}
