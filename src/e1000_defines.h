@@ -1382,6 +1382,11 @@
 #define E1000_STATUS_LAN_ID_OFFSET	2
 #define E1000_VFTA_ENTRIES		128
 
+#define E1000_TSSDP_SDP1_SEL(x)		((x) << 9)
+#define E1000_TSSDP_SDP1_EN			(1 << 11)
+#define E1000_CTRL_SPD1_IODIR		(1 << 23)
+#define E1000_TSAUXC_EN_CLK0		(1 << 2)
+
 #ifndef E1000_UNUSEDARG
 #define E1000_UNUSEDARG
 #endif /* E1000_UNUSEDARG */

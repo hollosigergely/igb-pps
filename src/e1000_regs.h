@@ -31,6 +31,7 @@
 #define E1000_FCT	0x00030  /* Flow Control Type - RW */
 #define E1000_CONNSW	0x00034  /* Copper/Fiber switch control - RW */
 #define E1000_VET	0x00038  /* VLAN Ether Type - RW */
+#define E1000_TSSDP	0x0003C  /* TSSDP */
 #define E1000_ICR	0x000C0  /* Interrupt Cause Read - R/clr */
 #define E1000_ITR	0x000C4  /* Interrupt Throttling Rate - RW */
 #define E1000_ICS	0x000C8  /* Interrupt Cause Set - WO */
@@ -622,5 +623,9 @@
 #define E1000_B2OGPRC	0x04158 /* BMC2OS packets received by host */
 #define E1000_O2BGPTC	0x08FE4 /* OS2BMC packets received by BMC */
 #define E1000_O2BSPC	0x0415C /* OS2BMC packets transmitted by host */
+
+#define E1000_FREQOUT0	0xB654
+#define E1000_TRGTTIML0	0xB644
+#define E1000_TRGTTIMH0	0xB648
 
 #endif

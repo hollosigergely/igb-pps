@@ -68,6 +68,37 @@
 #define INCVALUE_82576			(16u << IGB_82576_TSYNC_SHIFT)
 #define IGB_NBITS_82580			40
 
+
+static void igb_ptp_start_pps(struct igb_adapter *adapter) {
+	struct e1000_hw *hw = &adapter->hw;
+	u32 regval;
+
+	regval = E1000_READ_REG(hw, E1000_TSAUXC);
+	regval &= ~E1000_TSAUXC_EN_CLK0;
+	E1000_WRITE_REG(hw, E1000_TSAUXC, regval);
+
+	regval = E1000_READ_REG(hw, E1000_TSSDP);
+	regval |= E1000_TSSDP_SDP1_SEL(2);
+	regval |= E1000_TSSDP_SDP1_EN;
+	dev_info(&adapter->pdev->dev, "write TSSDP: %08X\n", regval);
+	E1000_WRITE_REG(hw, E1000_TSSDP, regval);
+	E1000_WRITE_REG(hw, E1000_FREQOUT0, 500000000);
+
+	regval = E1000_READ_REG(hw, E1000_CTRL);
+	regval |= E1000_CTRL_SPD1_IODIR;
+	E1000_WRITE_REG(hw, E1000_CTRL, regval);
+
+	regval = E1000_READ_REG(hw, E1000_SYSTIMH);
+	regval += 1;
+	dev_info(&adapter->pdev->dev, "time: %d\n", regval);
+	E1000_WRITE_REG(hw, E1000_TRGTTIMH0, regval);
+	E1000_WRITE_REG(hw, E1000_TRGTTIML0, 0);
+
+	regval = E1000_READ_REG(hw, E1000_TSAUXC);
+	regval |= E1000_TSAUXC_EN_CLK0;
+	E1000_WRITE_REG(hw, E1000_TSAUXC, regval);
+}
+
 /*
  * SYSTIM read access for the 82576
  */
@@ -146,6 +177,8 @@ static void igb_ptp_write_i210(struct igb_adapter *adapter,
 	 */
 	E1000_WRITE_REG(hw, E1000_SYSTIML, ts->tv_nsec);
 	E1000_WRITE_REG(hw, E1000_SYSTIMH, ts->tv_sec);
+
+	igb_ptp_start_pps(adapter);
 }
 
 /**
@@ -825,6 +858,7 @@ void igb_ptp_init(struct igb_adapter *adapter)
 {
 	struct e1000_hw *hw = &adapter->hw;
 	struct net_device *netdev = adapter->netdev;
+	u32 regval;
 
 	switch (hw->mac.type) {
 	case e1000_82576:
@@ -941,7 +975,11 @@ void igb_ptp_init(struct igb_adapter *adapter)
 			 adapter->netdev->name);
 		adapter->flags |= IGB_FLAG_PTP;
 	}
+
+	dev_info(&adapter->pdev->dev, "enabling PPS signal\n");
+	igb_ptp_start_pps(adapter);
 }
+
 
 /**
  *  igb_ptp_stop - Disable PTP device and stop the overflow check.
