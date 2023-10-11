@@ -3463,10 +3463,13 @@ static int igb_sw_init(struct igb_adapter *adapter)
 	hw->device_id = pdev->device;
 	hw->subsystem_vendor_id = pdev->subsystem_vendor;
 	hw->subsystem_device_id = pdev->subsystem_device;
-
+	
 	pci_read_config_byte(pdev, PCI_REVISION_ID, &hw->revision_id);
 
 	pci_read_config_word(pdev, PCI_COMMAND, &hw->bus.pci_cmd_word);
+
+	adapter->ptp_initialized = false;
+	adapter->read_count = 0;
 
 	/* set default ring sizes */
 	adapter->tx_ring_count = IGB_DEFAULT_TXD;

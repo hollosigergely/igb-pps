@@ -68,12 +68,32 @@
 #define INCVALUE_82576			(16u << IGB_82576_TSYNC_SHIFT)
 #define IGB_NBITS_82580			40
 
+static void writeRegs(const char* s, struct igb_adapter *adapter) {
+	struct e1000_hw *hw = &adapter->hw;
+	u32 regval;
+
+	E1000_READ_REG(hw, E1000_SYSTIMR);
+	dev_info(&adapter->pdev->dev, "%s\n", s);
+	regval = E1000_READ_REG(hw, E1000_TRGTTIMH0);
+	dev_info(&adapter->pdev->dev, "E1000_TRGTTIMH0: %d\n", regval);
+	regval = E1000_READ_REG(hw, E1000_TRGTTIML0);
+	dev_info(&adapter->pdev->dev, "E1000_TRGTTIML0: %d\n", regval);
+	regval = E1000_READ_REG(hw, E1000_SYSTIMH);
+	dev_info(&adapter->pdev->dev, "E1000_SYSTIMH: %d\n", regval);
+	regval = E1000_READ_REG(hw, E1000_SYSTIML);
+	dev_info(&adapter->pdev->dev, "E1000_SYSTIML: %d\n", regval);
+}
 
 static void igb_ptp_start_pps(struct igb_adapter *adapter) {
+	if(!adapter->ptp_initialized)
+		return;
+
 	struct e1000_hw *hw = &adapter->hw;
 	u32 regval;
 
 	regval = E1000_READ_REG(hw, E1000_TSAUXC);
+	regval &= ~(1 << 0);
+	regval &= ~(1 << 1);
 	regval &= ~E1000_TSAUXC_EN_CLK0;
 	E1000_WRITE_REG(hw, E1000_TSAUXC, regval);
 
@@ -82,22 +102,32 @@ static void igb_ptp_start_pps(struct igb_adapter *adapter) {
 	regval |= E1000_TSSDP_SDP1_EN;
 	dev_info(&adapter->pdev->dev, "write TSSDP: %08X\n", regval);
 	E1000_WRITE_REG(hw, E1000_TSSDP, regval);
-	E1000_WRITE_REG(hw, E1000_FREQOUT0, 500000000);
+	E1000_WRITE_REG(hw, E1000_FREQOUT0, 500000000U);
 
 	regval = E1000_READ_REG(hw, E1000_CTRL);
 	regval |= E1000_CTRL_SPD1_IODIR;
 	E1000_WRITE_REG(hw, E1000_CTRL, regval);
 
+	writeRegs("Before trigger write", adapter);
+
+	E1000_READ_REG(hw, E1000_SYSTIMR);
+	E1000_READ_REG(hw, E1000_SYSTIML);
 	regval = E1000_READ_REG(hw, E1000_SYSTIMH);
-	regval += 1;
+	regval += 2;
 	dev_info(&adapter->pdev->dev, "time: %d\n", regval);
 	E1000_WRITE_REG(hw, E1000_TRGTTIMH0, regval);
 	E1000_WRITE_REG(hw, E1000_TRGTTIML0, 0);
 
+	writeRegs("After trigger write", adapter);
+
 	regval = E1000_READ_REG(hw, E1000_TSAUXC);
 	regval |= E1000_TSAUXC_EN_CLK0;
 	E1000_WRITE_REG(hw, E1000_TSAUXC, regval);
+
+	adapter->read_count = 0;
 }
+
+
 
 /*
  * SYSTIM read access for the 82576
@@ -158,12 +188,21 @@ static void igb_ptp_read_i210(struct igb_adapter *adapter,
 	 * lowest register is SYSTIMR. Since we only need to provide nanosecond
 	 * resolution, we can ignore it.
 	 */
+
 	E1000_READ_REG(hw, E1000_SYSTIMR);
 	nsec = E1000_READ_REG(hw, E1000_SYSTIML);
 	sec = E1000_READ_REG(hw, E1000_SYSTIMH);
 
+	writeRegs("igb_ptp_read_i210: after read ", adapter);
+	if(adapter->read_count == 0)
+	{
+		E1000_WRITE_REG(hw, E1000_TRGTTIMH0, sec + 2);
+		E1000_WRITE_REG(hw, E1000_TRGTTIML0, 0);
+	}
+
 	ts->tv_sec = sec;
 	ts->tv_nsec = nsec;
+	adapter->read_count++;
 }
 
 static void igb_ptp_write_i210(struct igb_adapter *adapter,
@@ -856,9 +895,10 @@ int igb_ptp_set_ts_config(struct net_device *netdev, struct ifreq *ifr)
 
 void igb_ptp_init(struct igb_adapter *adapter)
 {
+	dev_info(&adapter->pdev->dev, "Initialize adapter PTP\n");
+
 	struct e1000_hw *hw = &adapter->hw;
 	struct net_device *netdev = adapter->netdev;
-	u32 regval;
 
 	switch (hw->mac.type) {
 	case e1000_82576:
@@ -916,7 +956,7 @@ void igb_ptp_init(struct igb_adapter *adapter)
 		adapter->ptp_caps.owner = THIS_MODULE;
 		adapter->ptp_caps.max_adj = 62499999;
 		adapter->ptp_caps.n_ext_ts = 0;
-		adapter->ptp_caps.pps = 0;
+		adapter->ptp_caps.pps = 1;
 		adapter->ptp_caps.adjfreq = igb_ptp_adjfreq_82580;
 		adapter->ptp_caps.adjtime = igb_ptp_adjtime_i210;
 #ifdef HAVE_PTP_CLOCK_INFO_GETTIME64
@@ -976,6 +1016,8 @@ void igb_ptp_init(struct igb_adapter *adapter)
 		adapter->flags |= IGB_FLAG_PTP;
 	}
 
+	adapter->ptp_initialized = true;
+
 	dev_info(&adapter->pdev->dev, "enabling PPS signal\n");
 	igb_ptp_start_pps(adapter);
 }
@@ -989,6 +1031,8 @@ void igb_ptp_init(struct igb_adapter *adapter)
  **/
 void igb_ptp_stop(struct igb_adapter *adapter)
 {
+	dev_info(&adapter->pdev->dev, "Stop adapter PTP\n");
+
 	switch (adapter->hw.mac.type) {
 	case e1000_82576:
 	case e1000_82580:
@@ -1027,6 +1071,8 @@ void igb_ptp_stop(struct igb_adapter *adapter)
  **/
 void igb_ptp_reset(struct igb_adapter *adapter)
 {
+	dev_info(&adapter->pdev->dev, "Reseting adapter PTP\n");
+
 	struct e1000_hw *hw = &adapter->hw;
 
 	if (!(adapter->flags & IGB_FLAG_PTP))
